@@ -1,0 +1,142 @@
+#!/bin/bash
+
+# Fonctions pour la gestion des utilisateurs
+function creer_utilisateur() {
+  # Créer un utilisateur avec les options par défaut ou personnalisées
+  nom_utilisateur=$1
+  mot_de_passe=$2
+  groupe_principal=$3
+
+  # Vérifier si les arguments obligatoires sont fournis
+  if [ -z "$nom_utilisateur" ] || [ -z "$mot_de_passe" ] || [ -z "$groupe_principal" ]; then
+    echo "Erreur : Les arguments 'nom_utilisateur', 'mot_de_passe' et 'groupe_principal' sont obligatoires."
+    return 1
+  fi
+
+  # Vérifier si l'utilisateur existe déjà
+  if getent passwd | grep -q "^$nom_utilisateur:"; then
+    echo "Erreur : L'utilisateur '$nom_utilisateur' existe déjà."
+    return 1
+  fi
+
+  # Définir les valeurs par défaut pour le shell et le répertoire personnel
+  shell="/bin/bash"
+  repertoire_personnel="/home/$nom_utilisateur"
+
+  # Créer l'utilisateur avec les options par défaut
+  useradd -m -g "$groupe_principal" -s "$shell" "$nom_utilisateur"
+
+  # Définir le mot de passe de l'utilisateur
+  echo "$nom_utilisateur:$mot_de_passe" | chpasswd
+
+  # Afficher un message de confirmation
+  echo "Utilisateur '$nom_utilisateur' créé avec succès."
+}
+
+function mettre_a_jour_utilisateur() {
+  # Mettre à jour les informations d'un utilisateur existant
+  nom_utilisateur=$1
+
+  # Vérifier si l'utilisateur existe
+  if ! getent passwd | grep -q "^$nom_utilisateur:"; then
+    echo "Erreur : L'utilisateur '$nom_utilisateur' n'existe pas."
+    return 1
+  fi
+
+  # Afficher le menu de mise à jour
+  echo "Sélectionnez l'information à mettre à jour pour '$nom_utilisateur':"
+  echo "1. Mot de passe"
+  echo "2. Groupe principal"
+  echo "3. Nom d'utilisateur"
+  echo "0. Retour"
+
+  read -p "Votre choix (0-3): " choix
+
+  case $choix in
+    1)  # Mettre à jour le mot de passe
+      echo "Entrez le nouveau mot de passe pour '$nom_utilisateur':"
+      read -p "Nouveau mot de passe: " nouveau_mot_de_passe
+      echo "$nom_utilisateur:$nouveau_mot_de_passe" | chpasswd
+      echo "Mot de passe de '$nom_utilisateur' mis à jour."
+      ;;
+    2)  # Mettre à jour le groupe principal
+      echo "Entrez le nouveau groupe principal pour '$nom_utilisateur':"
+      read -p "Nouveau groupe principal: " nouveau_groupe_principal
+      if getent group | grep -q "^$nouveau_groupe_principal:"; then
+        usermod -g "$nouveau_groupe_principal" "$nom_utilisateur"
+        echo "Groupe principal de '$nom_utilisateur' mis à jour."
+      else
+        echo "Erreur : Le groupe '$nouveau_groupe_principal' n'existe pas."
+      fi
+      ;;
+    3)  # Mettre à jour le nom d'utilisateur
+      echo "Entrez le nouveau nom d'utilisateur pour '$nom_utilisateur':"
+      read -p "Nouveau nom d'utilisateur: " nouveau_nom_utilisateur
+      if getent passwd | grep -q "^$nouveau_nom_utilisateur:"; then
+        echo "Erreur : Le nom d'utilisateur '$nouveau_nom_utilisateur' existe déjà."
+      else
+        usermod -l "$nouveau_nom_utilisateur" "$nom_utilisateur"
+        echo "Nom d'utilisateur de '$nom_utilisateur' mis à jour vers '$nouveau_nom_utilisateur'."
+      fi
+      ;;
+    0)
+      echo "Mise à jour annulée."
+      ;;
+    *)
+      echo "Choix invalide."
+      ;;
+  esac
+}
+
+function supprimer_utilisateur() {
+  # Supprimer un compte utilisateur obsolète ou inactif
+  nom_utilisateur=$1
+
+  # Vérifier si l'utilisateur existe
+  if ! getent passwd | grep -q "^$nom_utilisateur:"; then
+    echo "Erreur : L'utilisateur '$nom_utilisateur' n'existe pas."
+    return 1
+  fi
+
+  # Demander confirmation à l'utilisateur
+  echo "Attention ! Vous allez supprimer l'utilisateur '$nom_utilisateur'."
+  echo "Cette action est irréversible. Voulez-vous continuer ? (y/N)"
+  read -p "Votre choix (y/N): " confirmation
+
+  if [ "$confirmation" = "y" ] || [ "$confirmation" = "Y" ]; then
+    userdel -r "$nom_utilisateur"
+    echo "Utilisateur '$nom_utilisateur' supprimé avec succès."
+  else
+    echo "Suppression annulée."
+  fi
+}
+
+# Vérifier les options et arguments de la ligne de commande
+if [ $# -eq 0 ]; then
+  echo "Utilisation: gestion_user.sh [action] [options]"
+  echo "Actions disponibles:"
+  echo " creer: créer un nouvel utilisateur"
+  echo " mettre_a_jour: mettre à jour les informations d'un utilisateur"
+  echo " supprimer: supprimer un compte utilisateur"
+  exit 1
+fi
+
+action=$1
+shift
+
+# Exécuter l'action en fonction de l'option choisie
+case $action in
+  creer)
+    creer_utilisateur "$@"
+    ;;
+  mettre_a_jour)
+    mettre_a_jour_utilisateur "$@"
+    ;;
+  supprimer)
+    supprimer_utilisateur "$@"
+    ;;
+  *)
+    echo "Action invalide: $action"
+    exit 1
+    ;;
+esac
